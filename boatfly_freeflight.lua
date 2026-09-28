@@ -1,5 +1,5 @@
 -- ============================================
--- ボートで自由飛行（Blox Fruits用・FlyGuiV3スタイル・ドラッグ可能版・スマホ用移動スティック対応）
+-- ボートで自由飛行（Blox Fruits用・Robloxスティック連携版）
 -- エクセキューターに貼って実行またはloadstringで実行
 -- loadstring(game:HttpGet("https://raw.githubusercontent.com/matchaamatchadesu-ux/fly-boat/main/boatfly_freeflight.lua"))()
 -- ============================================
@@ -12,34 +12,60 @@ local LocalPlayer = Players.LocalPlayer
 local CONFIG = {
     BOAT_SPEED = 100,
     ON = true,
-    SENSITIVITY = 1.0,
-    TOUCH_MODE = UserInputService.TouchEnabled
+    SENSITIVITY = 1.0
 }
 
 local CONTROL_STATE = {
-    moveForward = false,
-    moveBackward = false,
-    moveLeft = false,
-    moveRight = false,
+    moveDirection = Vector3.new(0, 0, 0),
     moveUp = false,
     moveDown = false
 }
 
-local JOYSTICK_STATE = {
-    active = false,
-    id = nil,
-    vector = Vector2.new(0, 0),
-    knob = nil,
-    base = nil,
-    maxRadius = 40
-}
-
 local GUI_STATE = {
     isMinimized = false,
-    isDragging = false,
-    dragStart = Vector2.new(0, 0),
-    frameStart = UDim2.new(0, 10, 0, 10)
+    guiSize = UDim2.new(0, 280, 0, 280)
 }
+
+-- ===== スティック入力取得 =====
+local function getMoveDirection()
+    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+    local touchGui = playerGui:FindFirstChild("TouchGui")
+    
+    if not touchGui then
+        return Vector3.new(0, 0, 0)
+    end
+
+    -- Robloxの標準タッチスティックを探す
+    local touchControlFrame = touchGui:FindFirstChild("TouchControlFrame")
+    if not touchControlFrame then
+        return Vector3.new(0, 0, 0)
+    end
+
+    local thumbstick1 = touchControlFrame:FindFirstChild("Thumbstick1")
+    if not thumbstick1 then
+        return Vector3.new(0, 0, 0)
+    end
+
+    local thumbstickFrame = thumbstick1:FindFirstChild("ThumbstickFrame")
+    if not thumbstickFrame then
+        return Vector3.new(0, 0, 0)
+    end
+
+    -- スティック位置から移動ベクトルを計算
+    local stickPos = thumbstickFrame.AbsolutePosition
+    local stickSize = thumbstickFrame.AbsoluteSize
+    local centerX = stickPos.X + stickSize.X / 2
+    local centerY = stickPos.Y + stickSize.Y / 2
+
+    local mouse = LocalPlayer:GetMouse()
+    local distX = (mouse.X - centerX) / (stickSize.X / 2)
+    local distY = (mouse.Y - centerY) / (stickSize.Y / 2)
+
+    distX = math.clamp(distX, -1, 1)
+    distY = math.clamp(distY, -1, 1)
+
+    return Vector2.new(distX, distY)
+end
 
 -- ===== GUI作成 =====
 local function createGui()
@@ -52,17 +78,16 @@ local function createGui()
     screenGui.ResetOnSpawn = false
     screenGui.Parent = playerGui
 
-    -- メインフレーム
     local mainFrame = Instance.new("Frame")
     mainFrame.Name = "MainFrame"
-    mainFrame.Size = UDim2.new(0, 280, 0, 280)
+    mainFrame.Size = GUI_STATE.guiSize
     mainFrame.Position = UDim2.new(0, 10, 0, 10)
     mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
     mainFrame.BorderColor3 = Color3.fromRGB(0, 150, 255)
     mainFrame.BorderSizePixel = 2
     mainFrame.Parent = screenGui
 
-    -- タイトルバー
+    -- タイトルバー（ドラッグ用）
     local titleBar = Instance.new("Frame")
     titleBar.Name = "TitleBar"
     titleBar.Size = UDim2.new(1, 0, 0, 30)
@@ -72,7 +97,7 @@ local function createGui()
 
     local title = Instance.new("TextLabel")
     title.Name = "Title"
-    title.Size = UDim2.new(1, -60, 1, 0)
+    title.Size = UDim2.new(1, -90, 1, 0)
     title.Position = UDim2.new(0, 5, 0, 0)
     title.BackgroundTransparency = 1
     title.BorderSizePixel = 0
@@ -86,7 +111,7 @@ local function createGui()
     local minimizeButton = Instance.new("TextButton")
     minimizeButton.Name = "MinimizeButton"
     minimizeButton.Size = UDim2.new(0, 30, 0, 30)
-    minimizeButton.Position = UDim2.new(1, -60, 0, 0)
+    minimizeButton.Position = UDim2.new(1, -90, 0, 0)
     minimizeButton.BackgroundColor3 = Color3.fromRGB(0, 80, 150)
     minimizeButton.BorderSizePixel = 0
     minimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -94,6 +119,18 @@ local function createGui()
     minimizeButton.Font = Enum.Font.GothamBold
     minimizeButton.Text = "−"
     minimizeButton.Parent = titleBar
+
+    local resizeButton = Instance.new("TextButton")
+    resizeButton.Name = "ResizeButton"
+    resizeButton.Size = UDim2.new(0, 30, 0, 30)
+    resizeButton.Position = UDim2.new(1, -60, 0, 0)
+    resizeButton.BackgroundColor3 = Color3.fromRGB(100, 100, 150)
+    resizeButton.BorderSizePixel = 0
+    resizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    resizeButton.TextSize = 16
+    resizeButton.Font = Enum.Font.GothamBold
+    resizeButton.Text = "⟷"
+    resizeButton.Parent = titleBar
 
     local closeButton = Instance.new("TextButton")
     closeButton.Name = "CloseButton"
@@ -200,47 +237,6 @@ local function createGui()
         end
     end)
 
-    local speedSliderInput = Instance.new("TextButton")
-    speedSliderInput.Name = "SpeedSliderInput"
-    speedSliderInput.Size = UDim2.new(1, 0, 1, 0)
-    speedSliderInput.Position = UDim2.new(0, 0, 0, 0)
-    speedSliderInput.BackgroundTransparency = 1
-    speedSliderInput.BorderSizePixel = 0
-    speedSliderInput.Text = ""
-    speedSliderInput.Parent = speedSliderBg
-
-    local function updateSpeedFromSliderPercent(percent)
-        local p = math.clamp(percent, 0, 1)
-        CONFIG.BOAT_SPEED = math.floor(p * 500)
-        if CONFIG.BOAT_SPEED < 1 then CONFIG.BOAT_SPEED = 1 end
-        speedSlider.Size = UDim2.new(p, 0, 1, 0)
-        speedLabel.Text = "Speed: " .. CONFIG.BOAT_SPEED
-        speedInput.Text = tostring(CONFIG.BOAT_SPEED)
-    end
-
-    speedSliderInput.MouseButton1Down:Connect(function()
-        local connection
-        local connection2
-
-        connection = UserInputService.InputChanged:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseMovement then
-                local bgAbsSize = speedSliderBg.AbsoluteSize.X
-                local bgAbsPos = speedSliderBg.AbsolutePosition.X
-                local mouseX = LocalPlayer:GetMouse().X
-                local clickX = math.clamp(mouseX - bgAbsPos, 0, bgAbsSize)
-                local percent = clickX / bgAbsSize
-                updateSpeedFromSliderPercent(percent)
-            end
-        end)
-
-        connection2 = UserInputService.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                connection:Disconnect()
-                connection2:Disconnect()
-            end
-        end)
-    end)
-
     local infoLabel = Instance.new("TextLabel")
     infoLabel.Name = "InfoLabel"
     infoLabel.Size = UDim2.new(1, -20, 0, 60)
@@ -251,110 +247,11 @@ local function createGui()
     infoLabel.TextColor3 = Color3.fromRGB(150, 150, 200)
     infoLabel.TextSize = 10
     infoLabel.Font = Enum.Font.Gotham
-    infoLabel.Text = "WASD: Move | Space: Up\nCtrl: Down | Mouse: Look"
+    infoLabel.Text = "Mobile: Use Joystick\nPC: WASD Move, Space/Ctrl Up/Down"
     infoLabel.TextWrapped = true
     infoLabel.Parent = contentFrame
 
-    -- スマホ用ジョイスティック
-    local touchPad = Instance.new("Frame")
-    touchPad.Name = "TouchPad"
-    touchPad.Size = UDim2.new(0, 130, 0, 130)
-    touchPad.Position = UDim2.new(1, -150, 1, -150)
-    touchPad.AnchorPoint = Vector2.new(0, 0)
-    touchPad.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-    touchPad.BorderColor3 = Color3.fromRGB(0, 150, 255)
-    touchPad.BorderSizePixel = 2
-    touchPad.Parent = screenGui
-
-    local touchPadVisible = UserInputService.TouchEnabled
-    touchPad.Visible = touchPadVisible
-
-    local touchBase = Instance.new("Frame")
-    touchBase.Name = "TouchBase"
-    touchBase.Size = UDim2.new(0, 110, 0, 110)
-    touchBase.Position = UDim2.new(0.5, 0, 0.5, 0)
-    touchBase.AnchorPoint = Vector2.new(0.5, 0.5)
-    touchBase.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
-    touchBase.BorderSizePixel = 0
-    touchBase.Parent = touchPad
-
-    local touchBaseCircle = Instance.new("UICorner")
-    touchBaseCircle.CornerRadius = UDim.new(1, 0)
-    touchBaseCircle.Parent = touchBase
-
-    local touchKnob = Instance.new("Frame")
-    touchKnob.Name = "TouchKnob"
-    touchKnob.Size = UDim2.new(0, 42, 0, 42)
-    touchKnob.Position = UDim2.new(0.5, 0, 0.5, 0)
-    touchKnob.AnchorPoint = Vector2.new(0.5, 0.5)
-    touchKnob.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
-    touchKnob.BorderSizePixel = 0
-    touchKnob.Parent = touchBase
-
-    local touchKnobCorner = Instance.new("UICorner")
-    touchKnobCorner.CornerRadius = UDim.new(1, 0)
-    touchKnobCorner.Parent = touchKnob
-
-    JOYSTICK_STATE.base = touchBase
-    JOYSTICK_STATE.knob = touchKnob
-    JOYSTICK_STATE.maxRadius = 40
-
-    local function setStickFromVector(vec2)
-        local clamped = vec2
-        local length = clamped.Magnitude
-        if length > 1 then
-            clamped = clamped.Unit
-        end
-        local x = clamped.X * JOYSTICK_STATE.maxRadius
-        local y = clamped.Y * JOYSTICK_STATE.maxRadius
-        JOYSTICK_STATE.knob.Position = UDim2.new(0.5, x, 0.5, y)
-        JOYSTICK_STATE.vector = Vector2.new(clamped.X, clamped.Y)
-    end
-
-    local function resetStick()
-        JOYSTICK_STATE.active = false
-        JOYSTICK_STATE.id = nil
-        JOYSTICK_STATE.vector = Vector2.new(0, 0)
-        JOYSTICK_STATE.knob.Position = UDim2.new(0.5, 0, 0.5, 0)
-    end
-
-    touchBase.InputBegan:Connect(function(input, gameProcessed)
-        if gameProcessed then return end
-        if input.UserInputType == Enum.UserInputType.Touch then
-            JOYSTICK_STATE.active = true
-            JOYSTICK_STATE.id = input.PointerId
-            local center = touchBase.AbsolutePosition + (touchBase.AbsoluteSize / 2)
-            local delta = input.Position - center
-            local len = delta.Magnitude
-            local max = JOYSTICK_STATE.maxRadius
-            if len > max then
-                delta = delta.Unit * max
-            end
-            setStickFromVector(Vector2.new(delta.X / max, delta.Y / max))
-        end
-    end)
-
-    touchBase.InputChanged:Connect(function(input, gameProcessed)
-        if gameProcessed then return end
-        if input.UserInputType == Enum.UserInputType.Touch and JOYSTICK_STATE.active and input.PointerId == JOYSTICK_STATE.id then
-            local center = touchBase.AbsolutePosition + (touchBase.AbsoluteSize / 2)
-            local delta = input.Position - center
-            local len = delta.Magnitude
-            local max = JOYSTICK_STATE.maxRadius
-            if len > max then
-                delta = delta.Unit * max
-            end
-            local vec = Vector2.new(delta.X / max, delta.Y / max)
-            setStickFromVector(vec)
-        end
-    end)
-
-    touchBase.InputEnded:Connect(function(input, gameProcessed)
-        if input.UserInputType == Enum.UserInputType.Touch and JOYSTICK_STATE.active and input.PointerId == JOYSTICK_STATE.id then
-            resetStick()
-        end
-    end)
-
+    -- ドラッグ機能
     local isDragging = false
     local dragInput
     local dragStart
@@ -366,6 +263,7 @@ local function createGui()
             isDragging = true
             dragStart = input.Position
             startPos = mainFrame.Position
+            
             dragInput = UserInputService.InputChanged:Connect(function(input2)
                 if input2.UserInputType == Enum.UserInputType.MouseMovement then
                     local delta = input2.Position - dragStart
@@ -384,6 +282,7 @@ local function createGui()
         end
     end)
 
+    -- 最小化機能
     minimizeButton.MouseButton1Click:Connect(function()
         GUI_STATE.isMinimized = not GUI_STATE.isMinimized
         if GUI_STATE.isMinimized then
@@ -392,9 +291,43 @@ local function createGui()
             minimizeButton.Text = "+"
         else
             contentFrame.Visible = true
-            mainFrame.Size = UDim2.new(0, 280, 0, 280)
+            mainFrame.Size = GUI_STATE.guiSize
             minimizeButton.Text = "−"
         end
+    end)
+
+    -- サイズ変更機能
+    local isResizing = false
+    local resizeStartPos
+    local resizeStartSize
+
+    resizeButton.MouseButton1Down:Connect(function()
+        isResizing = true
+        resizeStartPos = UserInputService:GetMouseLocation()
+        resizeStartSize = mainFrame.Size
+        
+        local resizeConnection
+        resizeConnection = UserInputService.InputChanged:Connect(function()
+            if not isResizing then return end
+            local currentPos = UserInputService:GetMouseLocation()
+            local deltaX = currentPos.X - resizeStartPos.X
+            local deltaY = currentPos.Y - resizeStartPos.Y
+            
+            local newWidth = math.max(200, resizeStartSize.X.Offset + deltaX)
+            local newHeight = math.max(150, resizeStartSize.Y.Offset + deltaY)
+            
+            mainFrame.Size = UDim2.new(0, newWidth, 0, newHeight)
+            GUI_STATE.guiSize = mainFrame.Size
+        end)
+        
+        local endConnection
+        endConnection = UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                isResizing = false
+                resizeConnection:Disconnect()
+                endConnection:Disconnect()
+            end
+        end)
     end)
 
     closeButton.MouseButton1Click:Connect(function()
@@ -419,22 +352,14 @@ local function getMyBoat()
     return nil
 end
 
--- ===== キー入力処理 =====
+-- ===== キー入力処理（PC用） =====
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.W then CONTROL_STATE.moveForward = true end
-    if input.KeyCode == Enum.KeyCode.A then CONTROL_STATE.moveLeft = true end
-    if input.KeyCode == Enum.KeyCode.S then CONTROL_STATE.moveBackward = true end
-    if input.KeyCode == Enum.KeyCode.D then CONTROL_STATE.moveRight = true end
     if input.KeyCode == Enum.KeyCode.Space then CONTROL_STATE.moveUp = true end
     if input.KeyCode == Enum.KeyCode.LeftControl then CONTROL_STATE.moveDown = true end
 end)
 
 UserInputService.InputEnded:Connect(function(input, gameProcessed)
-    if input.KeyCode == Enum.KeyCode.W then CONTROL_STATE.moveForward = false end
-    if input.KeyCode == Enum.KeyCode.A then CONTROL_STATE.moveLeft = false end
-    if input.KeyCode == Enum.KeyCode.S then CONTROL_STATE.moveBackward = false end
-    if input.KeyCode == Enum.KeyCode.D then CONTROL_STATE.moveRight = false end
     if input.KeyCode == Enum.KeyCode.Space then CONTROL_STATE.moveUp = false end
     if input.KeyCode == Enum.KeyCode.LeftControl then CONTROL_STATE.moveDown = false end
 end)
@@ -446,6 +371,7 @@ RunService.RenderStepped:Connect(function()
     local boat, seat = getMyBoat()
     if not boat then return end
 
+    -- 当たり判定をOFF
     for _, p in pairs(boat:GetDescendants()) do
         if p:IsA("BasePart") then p.CanCollide = false end
     end
@@ -463,38 +389,40 @@ RunService.RenderStepped:Connect(function()
     local right = camera.CFrame.RightVector
     local up = camera.CFrame.UpVector
 
-    local moveDir2D = Vector2.new(0, 0)
+    -- スティック入力を取得（モバイル）
+    local stickInput = getMoveDirection()
+    
+    -- キーボード入力を取得（PC）
+    local keyInput = Vector2.new(0, 0)
+    if UserInputService:IsKeyDown(Enum.KeyCode.W) then keyInput.Y += 1 end
+    if UserInputService:IsKeyDown(Enum.KeyCode.S) then keyInput.Y -= 1 end
+    if UserInputService:IsKeyDown(Enum.KeyCode.A) then keyInput.X -= 1 end
+    if UserInputService:IsKeyDown(Enum.KeyCode.D) then keyInput.X += 1 end
 
-    if CONTROL_STATE.moveForward then moveDir2D.Y += 1 end
-    if CONTROL_STATE.moveBackward then moveDir2D.Y -= 1 end
-    if CONTROL_STATE.moveLeft then moveDir2D.X -= 1 end
-    if CONTROL_STATE.moveRight then moveDir2D.X += 1 end
-
-    if JOYSTICK_STATE.active then
-        moveDir2D = moveDir2D + JOYSTICK_STATE.vector
+    -- 入力を統合
+    local moveInput = stickInput + keyInput
+    if moveInput.Magnitude > 0 then
+        moveInput = moveInput.Unit
     end
 
-    local moveDir = Vector3.new(0, 0, 0)
-    if moveDir2D.Magnitude > 0 then
-        moveDir = (direction * moveDir2D.Y) + (right * moveDir2D.X)
+    -- 移動ベクトルを計算
+    local moveDir = (direction * moveInput.Y) + (right * moveInput.X)
+    if moveDir.Magnitude > 0 then
         moveDir = moveDir.Unit
     end
 
     local moveSpeed = CONFIG.BOAT_SPEED / 60
     local newPos = cf.Position + moveDir * moveSpeed
 
-    if CONTROL_STATE.moveUp then newPos = newPos + (up * moveSpeed * 1.5) end
-    if CONTROL_STATE.moveDown then newPos = newPos - (up * moveSpeed * 1.5) end
-
-    if JOYSTICK_STATE.active then
-        local vert = JOYSTICK_STATE.vector.Y
-        if vert > 0 then
-            newPos = newPos + (up * moveSpeed * 1.5 * vert)
-        elseif vert < 0 then
-            newPos = newPos - (up * moveSpeed * 1.5 * math.abs(vert))
-        end
+    -- 上下移動
+    if CONTROL_STATE.moveUp then
+        newPos = newPos + (up * moveSpeed * 1.5)
+    end
+    if CONTROL_STATE.moveDown then
+        newPos = newPos - (up * moveSpeed * 1.5)
     end
 
+    -- ボートの位置を更新
     local lookTarget = newPos + direction
     root.CFrame = CFrame.new(newPos, lookTarget)
 end)
