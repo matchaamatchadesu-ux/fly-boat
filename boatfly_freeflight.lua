@@ -1,73 +1,85 @@
 -- ============================================
--- ボートで自由飛行（Blox Fruits用・Robloxスティック連携版）
--- エクセキューターに貼って実行またはloadstringで実行
--- loadstring(game:HttpGet("https://raw.githubusercontent.com/matchaamatchadesu-ux/fly-boat/main/boatfly_freeflight.lua"))()
+-- ボートで自由飛行（Blox Fruits用・Eキー切替 + スマホ移動スティック対応 + GUI付き）
+-- エクセキューターに貼って実行
 -- ============================================
-local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
--- ===== デフォルト設定 =====
+local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+
 local CONFIG = {
-    BOAT_SPEED = 100,
-    ON = true,
-    SENSITIVITY = 1.0
+    FLY_SPEED = 50,
+    ON = false,
+    GUI_WIDTH = 280,
+    GUI_HEIGHT = 280
 }
 
-local CONTROL_STATE = {
-    moveDirection = Vector3.new(0, 0, 0),
-    moveUp = false,
-    moveDown = false
+local STATE = {
+    flyBody = nil,
+    moveVector = Vector2.new(0, 0),
+    up = false,
+    down = false,
+    minimized = false,
+    lastSeat = nil,
+    lastRoot = nil
 }
 
-local GUI_STATE = {
-    isMinimized = false,
-    guiSize = UDim2.new(0, 280, 0, 280)
-}
+-- ===== ボート取得 =====
+local function getBoatSeat()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local hum = char:FindFirstChild("Humanoid")
+    if not hum then return nil end
 
--- ===== スティック入力取得 =====
-local function getMoveDirection()
-    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
-    local touchGui = playerGui:FindFirstChild("TouchGui")
-    
-    if not touchGui then
-        return Vector3.new(0, 0, 0)
+    local seatPart = hum.SeatPart
+    if seatPart and (seatPart:IsA("VehicleSeat") or seatPart:IsA("Seat")) then
+        return seatPart
     end
 
-    -- Robloxの標準タッチスティックを探す
-    local touchControlFrame = touchGui:FindFirstChild("TouchControlFrame")
-    if not touchControlFrame then
-        return Vector3.new(0, 0, 0)
+    for _, boat in ipairs(workspace.Boats:GetChildren()) do
+        local seat = boat:FindFirstChild("VehicleSeat")
+        if seat and seat.Occupant == hum then
+            return seat
+        end
     end
-
-    local thumbstick1 = touchControlFrame:FindFirstChild("Thumbstick1")
-    if not thumbstick1 then
-        return Vector3.new(0, 0, 0)
-    end
-
-    local thumbstickFrame = thumbstick1:FindFirstChild("ThumbstickFrame")
-    if not thumbstickFrame then
-        return Vector3.new(0, 0, 0)
-    end
-
-    -- スティック位置から移動ベクトルを計算
-    local stickPos = thumbstickFrame.AbsolutePosition
-    local stickSize = thumbstickFrame.AbsoluteSize
-    local centerX = stickPos.X + stickSize.X / 2
-    local centerY = stickPos.Y + stickSize.Y / 2
-
-    local mouse = LocalPlayer:GetMouse()
-    local distX = (mouse.X - centerX) / (stickSize.X / 2)
-    local distY = (mouse.Y - centerY) / (stickSize.Y / 2)
-
-    distX = math.clamp(distX, -1, 1)
-    distY = math.clamp(distY, -1, 1)
-
-    return Vector2.new(distX, distY)
+    return nil
 end
 
--- ===== GUI作成 =====
+-- ===== スティック入力 =====
+local function getTouchStickVector()
+    if not UserInputService.TouchEnabled then
+        return Vector2.new(0, 0)
+    end
+
+    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+    local touchGui = playerGui:FindFirstChild("TouchGui")
+    if not touchGui then
+        return Vector2.new(0, 0)
+    end
+
+    local touchControlFrame = touchGui:FindFirstChild("TouchControlFrame")
+    if not touchControlFrame then
+        return Vector2.new(0, 0)
+    end
+
+    local joystick = touchControlFrame:FindFirstChild("Movement")
+    if joystick then
+        local center = joystick.AbsolutePosition + (joystick.AbsoluteSize / 2)
+        local mouse = LocalPlayer:GetMouse()
+        local delta = Vector2.new(mouse.X - center.X, mouse.Y - center.Y)
+        local max = joystick.AbsoluteSize.X * 0.5
+        if max <= 0 then return Vector2.new(0,0) end
+        delta = Vector2.new(math.clamp(delta.X / max, -1, 1), math.clamp(delta.Y / max, -1, 1))
+        return Vector2.new(delta.X, -delta.Y)
+    end
+
+    return Vector2.new(0, 0)
+end
+
+-- ===== GUI =====
 local function createGui()
     local playerGui = LocalPlayer:WaitForChild("PlayerGui")
     local existing = playerGui:FindFirstChild("BoatFlyGui")
@@ -80,14 +92,13 @@ local function createGui()
 
     local mainFrame = Instance.new("Frame")
     mainFrame.Name = "MainFrame"
-    mainFrame.Size = GUI_STATE.guiSize
+    mainFrame.Size = UDim2.new(0, CONFIG.GUI_WIDTH, 0, CONFIG.GUI_HEIGHT)
     mainFrame.Position = UDim2.new(0, 10, 0, 10)
     mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
     mainFrame.BorderColor3 = Color3.fromRGB(0, 150, 255)
     mainFrame.BorderSizePixel = 2
     mainFrame.Parent = screenGui
 
-    -- タイトルバー（ドラッグ用）
     local titleBar = Instance.new("Frame")
     titleBar.Name = "TitleBar"
     titleBar.Size = UDim2.new(1, 0, 0, 30)
@@ -104,7 +115,7 @@ local function createGui()
     title.TextColor3 = Color3.fromRGB(255, 255, 255)
     title.TextSize = 16
     title.Font = Enum.Font.GothamBold
-    title.Text = "⛵ Boat Free Flight"
+    title.Text = "⛵ Boat Fly"
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.Parent = titleBar
 
@@ -169,12 +180,12 @@ local function createGui()
     toggleButton.Name = "ToggleButton"
     toggleButton.Size = UDim2.new(0, 100, 0, 25)
     toggleButton.Position = UDim2.new(0, 170, 0, 10)
-    toggleButton.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+    toggleButton.BackgroundColor3 = CONFIG.ON and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(200, 0, 0)
     toggleButton.BorderSizePixel = 0
     toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     toggleButton.TextSize = 13
     toggleButton.Font = Enum.Font.GothamBold
-    toggleButton.Text = "ON"
+    toggleButton.Text = CONFIG.ON and "ON" or "OFF"
     toggleButton.Parent = contentFrame
 
     toggleButton.MouseButton1Click:Connect(function()
@@ -192,140 +203,118 @@ local function createGui()
     speedLabel.TextColor3 = Color3.fromRGB(100, 200, 255)
     speedLabel.TextSize = 12
     speedLabel.Font = Enum.Font.Gotham
-    speedLabel.Text = "Speed: 100"
+    speedLabel.Text = "Speed: 50"
     speedLabel.TextXAlignment = Enum.TextXAlignment.Left
     speedLabel.Parent = contentFrame
-
-    local speedSliderBg = Instance.new("Frame")
-    speedSliderBg.Name = "SpeedSliderBg"
-    speedSliderBg.Size = UDim2.new(1, -20, 0, 5)
-    speedSliderBg.Position = UDim2.new(0, 10, 0, 68)
-    speedSliderBg.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
-    speedSliderBg.BorderSizePixel = 0
-    speedSliderBg.Parent = contentFrame
-
-    local speedSlider = Instance.new("Frame")
-    speedSlider.Name = "SpeedSlider"
-    speedSlider.Size = UDim2.new(0.2, 0, 1, 0)
-    speedSlider.Position = UDim2.new(0, 0, 0, 0)
-    speedSlider.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
-    speedSlider.BorderSizePixel = 0
-    speedSlider.Parent = speedSliderBg
 
     local speedInput = Instance.new("TextBox")
     speedInput.Name = "SpeedInput"
     speedInput.Size = UDim2.new(1, -20, 0, 22)
-    speedInput.Position = UDim2.new(0, 10, 0, 80)
+    speedInput.Position = UDim2.new(0, 10, 0, 70)
     speedInput.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
     speedInput.BorderColor3 = Color3.fromRGB(0, 150, 255)
     speedInput.BorderSizePixel = 1
     speedInput.TextColor3 = Color3.fromRGB(255, 255, 255)
     speedInput.TextSize = 14
     speedInput.Font = Enum.Font.Gotham
-    speedInput.Text = "100"
+    speedInput.Text = "50"
     speedInput.Parent = contentFrame
 
     speedInput.FocusLost:Connect(function()
         local val = tonumber(speedInput.Text)
-        if val and val > 0 then
-            CONFIG.BOAT_SPEED = math.min(val, 500)
-            speedLabel.Text = "Speed: " .. CONFIG.BOAT_SPEED
-            speedInput.Text = tostring(CONFIG.BOAT_SPEED)
-            speedSlider.Size = UDim2.new(CONFIG.BOAT_SPEED / 500, 0, 1, 0)
+        if val then
+            CONFIG.FLY_SPEED = math.clamp(val, 10, 300)
+            speedLabel.Text = "Speed: " .. tostring(CONFIG.FLY_SPEED)
+            speedInput.Text = tostring(CONFIG.FLY_SPEED)
         else
-            speedInput.Text = tostring(CONFIG.BOAT_SPEED)
+            speedInput.Text = tostring(CONFIG.FLY_SPEED)
         end
     end)
 
+    local infoText = "E: ON/OFF\nMobile: left stick\nDesktop: WASD / Space / Ctrl"
     local infoLabel = Instance.new("TextLabel")
     infoLabel.Name = "InfoLabel"
-    infoLabel.Size = UDim2.new(1, -20, 0, 60)
-    infoLabel.Position = UDim2.new(0, 10, 0, 110)
+    infoLabel.Size = UDim2.new(1, -20, 0, 70)
+    infoLabel.Position = UDim2.new(0, 10, 0, 100)
     infoLabel.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
     infoLabel.BorderColor3 = Color3.fromRGB(0, 100, 150)
     infoLabel.BorderSizePixel = 1
     infoLabel.TextColor3 = Color3.fromRGB(150, 150, 200)
     infoLabel.TextSize = 10
     infoLabel.Font = Enum.Font.Gotham
-    infoLabel.Text = "Mobile: Use Joystick\nPC: WASD Move, Space/Ctrl Up/Down"
+    infoLabel.Text = infoText
     infoLabel.TextWrapped = true
     infoLabel.Parent = contentFrame
 
-    -- ドラッグ機能
-    local isDragging = false
-    local dragInput
-    local dragStart
-    local startPos
+    -- ドラッグ
+    local dragging = false
+    local dragStartPos
+    local dragStartFrame
 
     titleBar.InputBegan:Connect(function(input, gameProcessed)
         if gameProcessed then return end
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            isDragging = true
-            dragStart = input.Position
-            startPos = mainFrame.Position
-            
-            dragInput = UserInputService.InputChanged:Connect(function(input2)
-                if input2.UserInputType == Enum.UserInputType.MouseMovement then
-                    local delta = input2.Position - dragStart
-                    mainFrame.Position = startPos + UDim2.new(0, delta.X, 0, delta.Y)
+            dragging = true
+            dragStartPos = input.Position
+            dragStartFrame = mainFrame.Position
+            local moved
+            moved = UserInputService.InputChanged:Connect(function(input2)
+                if dragging and input2.UserInputType == Enum.UserInputType.MouseMovement then
+                    local delta = input2.Position - dragStartPos
+                    mainFrame.Position = dragStartFrame + UDim2.new(0, delta.X, 0, delta.Y)
+                end
+            end)
+            local ended
+            ended = UserInputService.InputEnded:Connect(function(input3)
+                if input3.UserInputType == Enum.UserInputType.MouseButton1 then
+                    dragging = false
+                    moved:Disconnect()
+                    ended:Disconnect()
                 end
             end)
         end
     end)
 
-    titleBar.InputEnded:Connect(function(input, gameProcessed)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            isDragging = false
-            if dragInput then
-                dragInput:Disconnect()
-            end
-        end
-    end)
-
-    -- 最小化機能
+    -- 最小化
     minimizeButton.MouseButton1Click:Connect(function()
-        GUI_STATE.isMinimized = not GUI_STATE.isMinimized
-        if GUI_STATE.isMinimized then
+        STATE.minimized = not STATE.minimized
+        if STATE.minimized then
             contentFrame.Visible = false
-            mainFrame.Size = UDim2.new(0, 280, 0, 30)
+            mainFrame.Size = UDim2.new(0, CONFIG.GUI_WIDTH, 0, 30)
             minimizeButton.Text = "+"
         else
             contentFrame.Visible = true
-            mainFrame.Size = GUI_STATE.guiSize
+            mainFrame.Size = UDim2.new(0, CONFIG.GUI_WIDTH, 0, CONFIG.GUI_HEIGHT)
             minimizeButton.Text = "−"
         end
     end)
 
-    -- サイズ変更機能
-    local isResizing = false
-    local resizeStartPos
-    local resizeStartSize
-
+    -- サイズ変更
     resizeButton.MouseButton1Down:Connect(function()
-        isResizing = true
-        resizeStartPos = UserInputService:GetMouseLocation()
-        resizeStartSize = mainFrame.Size
-        
-        local resizeConnection
-        resizeConnection = UserInputService.InputChanged:Connect(function()
-            if not isResizing then return end
-            local currentPos = UserInputService:GetMouseLocation()
-            local deltaX = currentPos.X - resizeStartPos.X
-            local deltaY = currentPos.Y - resizeStartPos.Y
-            
-            local newWidth = math.max(200, resizeStartSize.X.Offset + deltaX)
-            local newHeight = math.max(150, resizeStartSize.Y.Offset + deltaY)
-            
-            mainFrame.Size = UDim2.new(0, newWidth, 0, newHeight)
-            GUI_STATE.guiSize = mainFrame.Size
+        local startMouse = UserInputService:GetMouseLocation()
+        local startSize = mainFrame.Size
+        local resizing = true
+
+        local moveConn
+        moveConn = UserInputService.InputChanged:Connect(function(input)
+            if resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
+                local mouse = UserInputService:GetMouseLocation()
+                local dx = mouse.X - startMouse.X
+                local dy = mouse.Y - startMouse.Y
+                local newW = math.clamp(startSize.X.Offset + dx, 200, 420)
+                local newH = math.clamp(startSize.Y.Offset + dy, 150, 420)
+                mainFrame.Size = UDim2.new(0, newW, 0, newH)
+                CONFIG.GUI_WIDTH = newW
+                CONFIG.GUI_HEIGHT = newH
+            end
         end)
-        
-        local endConnection
-        endConnection = UserInputService.InputEnded:Connect(function(input)
+
+        local endConn
+        endConn = UserInputService.InputEnded:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                isResizing = false
-                resizeConnection:Disconnect()
-                endConnection:Disconnect()
+                resizing = false
+                moveConn:Disconnect()
+                endConn:Disconnect()
             end
         end)
     end)
@@ -337,95 +326,126 @@ local function createGui()
     return screenGui
 end
 
--- ===== ボート取得関数 =====
-local function getMyBoat()
-    local char = LocalPlayer.Character
-    if not char then return nil end
-    local hum = char:FindFirstChild("Humanoid")
-    if not hum then return nil end
-    for _, boat in pairs(workspace.Boats:GetChildren()) do
-        local seat = boat:FindFirstChild("VehicleSeat")
-        if seat and seat.Occupant == hum then
-            return boat, seat
-        end
+-- ===== フライトを開始/停止 =====
+local function startFlying()
+    if CONFIG.ON then return end
+
+    local seat = getBoatSeat()
+    if not seat then
+        print("ボートに乗っていません")
+        return
     end
-    return nil
+
+    local rootPart = seat.Parent:FindFirstChild("HumanoidRootPart") or seat
+    if not rootPart then
+        print("rootPartが見つかりません")
+        return
+    end
+
+    CONFIG.ON = true
+    STATE.lastSeat = seat
+    STATE.lastRoot = rootPart
+
+    if STATE.flyBody then STATE.flyBody:Destroy() end
+    local flyBody = Instance.new("BodyVelocity")
+    flyBody.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    flyBody.Velocity = Vector3.new(0, 0, 0)
+    flyBody.Parent = rootPart
+    STATE.flyBody = flyBody
+
+    local gyro = Instance.new("BodyGyro")
+    gyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    gyro.CFrame = rootPart.CFrame
+    gyro.Parent = rootPart
+
+    print("ボート飛行: ON")
 end
 
--- ===== キー入力処理（PC用） =====
+local function stopFlying()
+    if not CONFIG.ON then return end
+    CONFIG.ON = false
+    if STATE.flyBody then
+        STATE.flyBody:Destroy()
+        STATE.flyBody = nil
+    end
+    print("ボート飛行: OFF")
+end
+
+-- ===== Eキー切替 =====
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.Space then CONTROL_STATE.moveUp = true end
-    if input.KeyCode == Enum.KeyCode.LeftControl then CONTROL_STATE.moveDown = true end
+    if input.KeyCode == Enum.KeyCode.E then
+        if CONFIG.ON then
+            stopFlying()
+        else
+            startFlying()
+        end
+    end
+end)
+
+-- ===== キーボード入力 =====
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.W then STATE.moveVector = STATE.moveVector + Vector2.new(0, 1) end
+    if input.KeyCode == Enum.KeyCode.S then STATE.moveVector = STATE.moveVector + Vector2.new(0, -1) end
+    if input.KeyCode == Enum.KeyCode.A then STATE.moveVector = STATE.moveVector + Vector2.new(-1, 0) end
+    if input.KeyCode == Enum.KeyCode.D then STATE.moveVector = STATE.moveVector + Vector2.new(1, 0) end
+    if input.KeyCode == Enum.KeyCode.Space then STATE.up = true end
+    if input.KeyCode == Enum.KeyCode.LeftControl then STATE.down = true end
 end)
 
 UserInputService.InputEnded:Connect(function(input, gameProcessed)
-    if input.KeyCode == Enum.KeyCode.Space then CONTROL_STATE.moveUp = false end
-    if input.KeyCode == Enum.KeyCode.LeftControl then CONTROL_STATE.moveDown = false end
+    if input.KeyCode == Enum.KeyCode.W then STATE.moveVector = STATE.moveVector - Vector2.new(0, 1) end
+    if input.KeyCode == Enum.KeyCode.S then STATE.moveVector = STATE.moveVector - Vector2.new(0, -1) end
+    if input.KeyCode == Enum.KeyCode.A then STATE.moveVector = STATE.moveVector - Vector2.new(-1, 0) end
+    if input.KeyCode == Enum.KeyCode.D then STATE.moveVector = STATE.moveVector - Vector2.new(1, 0) end
+    if input.KeyCode == Enum.KeyCode.Space then STATE.up = false end
+    if input.KeyCode == Enum.KeyCode.LeftControl then STATE.down = false end
 end)
 
--- ===== メインループ（自由飛行） =====
+-- ===== メインループ =====
 RunService.RenderStepped:Connect(function()
-    if not CONFIG.ON then return end
+    if not CONFIG.ON or not STATE.flyBody then return end
 
-    local boat, seat = getMyBoat()
-    if not boat then return end
-
-    -- 当たり判定をOFF
-    for _, p in pairs(boat:GetDescendants()) do
-        if p:IsA("BasePart") then p.CanCollide = false end
-    end
-    local char = LocalPlayer.Character
-    if char then
-        for _, p in pairs(char:GetDescendants()) do
-            if p:IsA("BasePart") then p.CanCollide = false end
-        end
+    local seat = getBoatSeat()
+    if not seat then
+        stopFlying()
+        return
     end
 
-    local root = boat.PrimaryPart or seat
-    local cf = root.CFrame
+    local rootPart = seat.Parent:FindFirstChild("HumanoidRootPart") or seat
+    if not rootPart then return end
+
+    if STATE.flyBody.Parent ~= rootPart then
+        STATE.flyBody.Parent = rootPart
+    end
+
     local camera = workspace.CurrentCamera
-    local direction = camera.CFrame.LookVector
+    local forward = camera.CFrame.LookVector
     local right = camera.CFrame.RightVector
-    local up = camera.CFrame.UpVector
+    local upVector = Vector3.new(0, 1, 0)
 
-    -- スティック入力を取得（モバイル）
-    local stickInput = getMoveDirection()
-    
-    -- キーボード入力を取得（PC）
-    local keyInput = Vector2.new(0, 0)
-    if UserInputService:IsKeyDown(Enum.KeyCode.W) then keyInput.Y += 1 end
-    if UserInputService:IsKeyDown(Enum.KeyCode.S) then keyInput.Y -= 1 end
-    if UserInputService:IsKeyDown(Enum.KeyCode.A) then keyInput.X -= 1 end
-    if UserInputService:IsKeyDown(Enum.KeyCode.D) then keyInput.X += 1 end
-
-    -- 入力を統合
-    local moveInput = stickInput + keyInput
-    if moveInput.Magnitude > 0 then
-        moveInput = moveInput.Unit
+    local touchDir = getTouchStickVector()
+    local combined = STATE.moveVector + touchDir
+    if combined.Magnitude > 0 then
+        combined = combined.Unit
+    else
+        combined = Vector2.new(0, 0)
     end
 
-    -- 移動ベクトルを計算
-    local moveDir = (direction * moveInput.Y) + (right * moveInput.X)
+    local moveDir = Vector3.new(0, 0, 0)
+    moveDir = moveDir + (forward * combined.Y)
+    moveDir = moveDir + (right * combined.X)
+
+    if STATE.up then moveDir = moveDir + upVector end
+    if STATE.down then moveDir = moveDir - upVector end
+
     if moveDir.Magnitude > 0 then
-        moveDir = moveDir.Unit
+        STATE.flyBody.Velocity = moveDir.Unit * CONFIG.FLY_SPEED
+    else
+        STATE.flyBody.Velocity = Vector3.new(0, 0, 0)
     end
-
-    local moveSpeed = CONFIG.BOAT_SPEED / 60
-    local newPos = cf.Position + moveDir * moveSpeed
-
-    -- 上下移動
-    if CONTROL_STATE.moveUp then
-        newPos = newPos + (up * moveSpeed * 1.5)
-    end
-    if CONTROL_STATE.moveDown then
-        newPos = newPos - (up * moveSpeed * 1.5)
-    end
-
-    -- ボートの位置を更新
-    local lookTarget = newPos + direction
-    root.CFrame = CFrame.new(newPos, lookTarget)
 end)
 
 createGui()
-print("✅ Boat Free Flight loaded! / ボート自由飛行がロードされました")
+print("Boat fly script ready. Press E to toggle flight.")
