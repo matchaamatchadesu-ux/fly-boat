@@ -1,222 +1,31 @@
 -- ============================================
--- ボートで空飛び（Blox Fruits用・自分の移動と同期版）
+-- ボートで空飛び（Blox Fruits用・自由移動版）
 -- エクセキューターに貼って実行
 -- ============================================
 local RunService = game:GetService("RunService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
--- ===== 設定 =====
 local CONFIG = {
+    ENABLED = false,
     BOAT_SPEED = 350,
     FLY_HEIGHT = 150,
-    AUTO_MODE = true,
-    ON = true
+    GUI_VISIBLE = true,
 }
 
-local CONTROL_STATE = {
-    moveForward = false,
-    moveBackward = false,
-    moveLeft = false,
-    moveRight = false,
-    moveUp = false,
-    moveDown = false
-}
-
--- ===== GUI作成 =====
-local function createGui()
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "BoatFlyGui"
-    screenGui.ResetOnSpawn = false
-    screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-
-    local mainFrame = Instance.new("Frame")
-    mainFrame.Name = "MainFrame"
-    mainFrame.Size = UDim2.new(0, 300, 0, 280)
-    mainFrame.Position = UDim2.new(0, 10, 0, 10)
-    mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    mainFrame.BorderColor3 = Color3.fromRGB(100, 200, 255)
-    mainFrame.BorderSizePixel = 2
-    mainFrame.Parent = screenGui
-
-    local title = Instance.new("TextLabel")
-    title.Name = "Title"
-    title.Size = UDim2.new(1, 0, 0, 30)
-    title.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    title.BorderSizePixel = 0
-    title.TextColor3 = Color3.fromRGB(100, 200, 255)
-    title.TextSize = 18
-    title.Font = Enum.Font.GothamBold
-    title.Text = "⛵ Boat Fly Control"
-    title.Parent = mainFrame
-
-    -- ON/OFF
-    local toggleLabel = Instance.new("TextLabel")
-    toggleLabel.Name = "ToggleLabel"
-    toggleLabel.Size = UDim2.new(0, 150, 0, 25)
-    toggleLabel.Position = UDim2.new(0, 10, 0, 40)
-    toggleLabel.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    toggleLabel.BorderSizePixel = 0
-    toggleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    toggleLabel.TextSize = 14
-    toggleLabel.Font = Enum.Font.Gotham
-    toggleLabel.Text = "Power:"
-    toggleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    toggleLabel.Parent = mainFrame
-
-    local toggleButton = Instance.new("TextButton")
-    toggleButton.Name = "ToggleButton"
-    toggleButton.Size = UDim2.new(0, 120, 0, 25)
-    toggleButton.Position = UDim2.new(0, 170, 0, 40)
-    toggleButton.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-    toggleButton.BorderSizePixel = 0
-    toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    toggleButton.TextSize = 14
-    toggleButton.Font = Enum.Font.GothamBold
-    toggleButton.Text = "ON"
-    toggleButton.Parent = mainFrame
-
-    toggleButton.MouseButton1Click:Connect(function()
-        CONFIG.ON = not CONFIG.ON
-        toggleButton.BackgroundColor3 = CONFIG.ON and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
-        toggleButton.Text = CONFIG.ON and "ON" or "OFF"
-    end)
-
-    -- モード切り替え
-    local modeLabel = Instance.new("TextLabel")
-    modeLabel.Name = "ModeLabel"
-    modeLabel.Size = UDim2.new(0, 150, 0, 25)
-    modeLabel.Position = UDim2.new(0, 10, 0, 70)
-    modeLabel.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    modeLabel.BorderSizePixel = 0
-    modeLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    modeLabel.TextSize = 14
-    modeLabel.Font = Enum.Font.Gotham
-    modeLabel.Text = "Mode:"
-    modeLabel.TextXAlignment = Enum.TextXAlignment.Left
-    modeLabel.Parent = mainFrame
-
-    local modeButton = Instance.new("TextButton")
-    modeButton.Name = "ModeButton"
-    modeButton.Size = UDim2.new(0, 120, 0, 25)
-    modeButton.Position = UDim2.new(0, 170, 0, 70)
-    modeButton.BackgroundColor3 = Color3.fromRGB(100, 100, 200)
-    modeButton.BorderSizePixel = 0
-    modeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    modeButton.TextSize = 14
-    modeButton.Font = Enum.Font.GothamBold
-    modeButton.Text = "AUTO"
-    modeButton.Parent = mainFrame
-
-    modeButton.MouseButton1Click:Connect(function()
-        CONFIG.AUTO_MODE = not CONFIG.AUTO_MODE
-        modeButton.BackgroundColor3 = CONFIG.AUTO_MODE and Color3.fromRGB(100, 100, 200) or Color3.fromRGB(200, 100, 100)
-        modeButton.Text = CONFIG.AUTO_MODE and "AUTO" or "MANUAL"
-    end)
-
-    -- Speed
-    local speedLabel = Instance.new("TextLabel")
-    speedLabel.Name = "SpeedLabel"
-    speedLabel.Size = UDim2.new(1, -20, 0, 20)
-    speedLabel.Position = UDim2.new(0, 10, 0, 105)
-    speedLabel.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    speedLabel.BorderSizePixel = 0
-    speedLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    speedLabel.TextSize = 12
-    speedLabel.Font = Enum.Font.Gotham
-    speedLabel.Text = "Speed: 350"
-    speedLabel.TextXAlignment = Enum.TextXAlignment.Left
-    speedLabel.Parent = mainFrame
-
-    local speedBox = Instance.new("TextBox")
-    speedBox.Name = "SpeedBox"
-    speedBox.Size = UDim2.new(1, -20, 0, 25)
-    speedBox.Position = UDim2.new(0, 10, 0, 125)
-    speedBox.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-    speedBox.BorderColor3 = Color3.fromRGB(100, 200, 255)
-    speedBox.BorderSizePixel = 1
-    speedBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-    speedBox.TextSize = 14
-    speedBox.Font = Enum.Font.Gotham
-    speedBox.Text = "350"
-    speedBox.Parent = mainFrame
-
-    speedBox.FocusLost:Connect(function()
-        local val = tonumber(speedBox.Text)
-        if val and val > 0 then
-            CONFIG.BOAT_SPEED = val
-            speedLabel.Text = "Speed: " .. val
-        else
-            speedBox.Text = tostring(CONFIG.BOAT_SPEED)
-        end
-    end)
-
-    -- Height
-    local heightLabel = Instance.new("TextLabel")
-    heightLabel.Name = "HeightLabel"
-    heightLabel.Size = UDim2.new(1, -20, 0, 20)
-    heightLabel.Position = UDim2.new(0, 10, 0, 160)
-    heightLabel.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    heightLabel.BorderSizePixel = 0
-    heightLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    heightLabel.TextSize = 12
-    heightLabel.Font = Enum.Font.Gotham
-    heightLabel.Text = "Height: 150"
-    heightLabel.TextXAlignment = Enum.TextXAlignment.Left
-    heightLabel.Parent = mainFrame
-
-    local heightBox = Instance.new("TextBox")
-    heightBox.Name = "HeightBox"
-    heightBox.Size = UDim2.new(1, -20, 0, 25)
-    heightBox.Position = UDim2.new(0, 10, 0, 180)
-    heightBox.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-    heightBox.BorderColor3 = Color3.fromRGB(100, 200, 255)
-    heightBox.BorderSizePixel = 1
-    heightBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-    heightBox.TextSize = 14
-    heightBox.Font = Enum.Font.Gotham
-    heightBox.Text = "150"
-    heightBox.Parent = mainFrame
-
-    heightBox.FocusLost:Connect(function()
-        local val = tonumber(heightBox.Text)
-        if val and val >= 0 then
-            CONFIG.FLY_HEIGHT = val
-            heightLabel.Text = "Height: " .. val
-        else
-            heightBox.Text = tostring(CONFIG.FLY_HEIGHT)
-        end
-    end)
-
-    -- 説明
-    local infoLabel = Instance.new("TextLabel")
-    infoLabel.Name = "InfoLabel"
-    infoLabel.Size = UDim2.new(1, -20, 0, 50)
-    infoLabel.Position = UDim2.new(0, 10, 0, 220)
-    infoLabel.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    infoLabel.BorderSizePixel = 0
-    infoLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
-    infoLabel.TextSize = 11
-    infoLabel.Font = Enum.Font.Gotham
-    infoLabel.Text = "Manual: 自分の移動に同期\nSpace上昇, Ctrl下降"
-    infoLabel.TextWrapped = true
-    infoLabel.Parent = mainFrame
-
-    return screenGui
+local function clamp(v, min, max)
+    if v < min then return min end
+    if v > max then return max end
+    return v
 end
 
 local function getMyBoat()
     local char = LocalPlayer.Character
     if not char then return nil end
+
     local hum = char:FindFirstChild("Humanoid")
     if not hum then return nil end
-
-    local seatPart = hum.SeatPart
-    if seatPart and (seatPart:IsA("VehicleSeat") or seatPart:IsA("Seat")) then
-        return seatPart.Parent, seatPart
-    end
 
     for _, boat in pairs(workspace.Boats:GetChildren()) do
         local seat = boat:FindFirstChild("VehicleSeat")
@@ -225,116 +34,297 @@ local function getMyBoat()
         end
     end
 
+    local seatPart = hum.SeatPart
+    if seatPart and (seatPart:IsA("VehicleSeat") or seatPart:IsA("Seat")) then
+        return seatPart.Parent, seatPart
+    end
+
     return nil
 end
 
+-- ===== GUI作成 =====
+local gui = Instance.new("ScreenGui")
+gui.Name = "BoatFlyGUI"
+gui.ResetOnSpawn = false
+gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local main = Instance.new("Frame")
+main.Name = "Main"
+main.Size = UDim2.new(0, 350, 0, 400)
+main.Position = UDim2.new(0, 12, 0, 12)
+main.BackgroundColor3 = Color3.fromRGB(26, 30, 38)
+main.BorderSizePixel = 0
+main.Parent = gui
+
+local uic = Instance.new("UICorner")
+uic.CornerRadius = UDim.new(0, 14)
+uic.Parent = main
+
+-- タイトルバー
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 40)
+title.BackgroundColor3 = Color3.fromRGB(43, 52, 67)
+title.Text = "🚤 ボートフライ"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextSize = 18
+title.Font = Enum.Font.GothamBold
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = main
+
+local titlePadding = Instance.new("UIPadding")
+titlePadding.PaddingLeft = UDim.new(0, 15)
+titlePadding.Parent = title
+
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 14)
+titleCorner.Parent = title
+
+-- 閉じるボタン
+local closeButton = Instance.new("TextButton")
+closeButton.Size = UDim2.new(0, 32, 0, 32)
+closeButton.Position = UDim2.new(1, -40, 0, 6)
+closeButton.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
+closeButton.Text = "×"
+closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeButton.TextSize = 20
+closeButton.Font = Enum.Font.GothamBold
+closeButton.Parent = main
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 10)
+closeCorner.Parent = closeButton
+
+closeButton.MouseButton1Click:Connect(function()
+    gui.Enabled = false
+end)
+
+-- コンテンツフレーム
+local content = Instance.new("Frame")
+content.Size = UDim2.new(1, -30, 1, -60)
+content.Position = UDim2.new(0, 15, 0, 50)
+content.BackgroundTransparency = 1
+content.Parent = main
+
+-- ON/OFFボタン
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(1, 0, 0, 40)
+toggleButton.Position = UDim2.new(0, 0, 0, 0)
+toggleButton.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+toggleButton.Text = "OFF"
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.TextSize = 16
+toggleButton.Font = Enum.Font.GothamBold
+toggleButton.Parent = content
+
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(0, 10)
+toggleCorner.Parent = toggleButton
+
+toggleButton.MouseButton1Click:Connect(function()
+    CONFIG.ENABLED = not CONFIG.ENABLED
+    toggleButton.Text = CONFIG.ENABLED and "ON" or "OFF"
+    toggleButton.BackgroundColor3 = CONFIG.ENABLED and Color3.fromRGB(52, 196, 92) or Color3.fromRGB(180, 40, 40)
+end)
+
+-- 速度ラベル
+local speedLabel = Instance.new("TextLabel")
+speedLabel.Size = UDim2.new(1, 0, 0, 25)
+speedLabel.Position = UDim2.new(0, 0, 0, 55)
+speedLabel.BackgroundTransparency = 1
+speedLabel.Text = "速度: 350"
+speedLabel.TextColor3 = Color3.fromRGB(215, 220, 230)
+speedLabel.TextSize = 13
+speedLabel.Font = Enum.Font.GothamBold
+speedLabel.TextXAlignment = Enum.TextXAlignment.Left
+speedLabel.Parent = content
+
+-- 速度入力ボックス
+local speedInput = Instance.new("TextBox")
+speedInput.Size = UDim2.new(1, 0, 0, 35)
+speedInput.Position = UDim2.new(0, 0, 0, 82)
+speedInput.BackgroundColor3 = Color3.fromRGB(46, 52, 62)
+speedInput.Text = tostring(CONFIG.BOAT_SPEED)
+speedInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+speedInput.TextSize = 15
+speedInput.Font = Enum.Font.Gotham
+speedInput.BorderSizePixel = 1
+speedInput.BorderColor3 = Color3.fromRGB(120, 170, 255)
+speedInput.Parent = content
+
+local speedCorner = Instance.new("UICorner")
+speedCorner.CornerRadius = UDim.new(0, 10)
+speedCorner.Parent = speedInput
+
+speedInput.FocusLost:Connect(function()
+    local v = tonumber(speedInput.Text)
+    if v then
+        CONFIG.BOAT_SPEED = clamp(v, 50, 1500)
+        speedInput.Text = tostring(CONFIG.BOAT_SPEED)
+        speedLabel.Text = "速度: " .. tostring(CONFIG.BOAT_SPEED)
+    else
+        speedInput.Text = tostring(CONFIG.BOAT_SPEED)
+    end
+end)
+
+-- 高さラベル
+local heightLabel = Instance.new("TextLabel")
+heightLabel.Size = UDim2.new(1, 0, 0, 25)
+heightLabel.Position = UDim2.new(0, 0, 0, 130)
+heightLabel.BackgroundTransparency = 1
+heightLabel.Text = "高さ: 150"
+heightLabel.TextColor3 = Color3.fromRGB(215, 220, 230)
+heightLabel.TextSize = 13
+heightLabel.Font = Enum.Font.GothamBold
+heightLabel.TextXAlignment = Enum.TextXAlignment.Left
+heightLabel.Parent = content
+
+-- 高さ入力ボックス
+local heightInput = Instance.new("TextBox")
+heightInput.Size = UDim2.new(1, 0, 0, 35)
+heightInput.Position = UDim2.new(0, 0, 0, 157)
+heightInput.BackgroundColor3 = Color3.fromRGB(46, 52, 62)
+heightInput.Text = tostring(CONFIG.FLY_HEIGHT)
+heightInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+heightInput.TextSize = 15
+heightInput.Font = Enum.Font.Gotham
+heightInput.BorderSizePixel = 1
+heightInput.BorderColor3 = Color3.fromRGB(120, 170, 255)
+heightInput.Parent = content
+
+local heightCorner = Instance.new("UICorner")
+heightCorner.CornerRadius = UDim.new(0, 10)
+heightCorner.Parent = heightInput
+
+heightInput.FocusLost:Connect(function()
+    local v = tonumber(heightInput.Text)
+    if v then
+        CONFIG.FLY_HEIGHT = clamp(v, 0, 500)
+        heightInput.Text = tostring(CONFIG.FLY_HEIGHT)
+        heightLabel.Text = "高さ: " .. tostring(CONFIG.FLY_HEIGHT)
+    else
+        heightInput.Text = tostring(CONFIG.FLY_HEIGHT)
+    end
+end)
+
+-- 説明テキスト
+local info = Instance.new("TextLabel")
+info.Size = UDim2.new(1, 0, 0, 100)
+info.Position = UDim2.new(0, 0, 0, 210)
+info.BackgroundColor3 = Color3.fromRGB(43, 52, 67)
+info.TextColor3 = Color3.fromRGB(180, 200, 240)
+info.TextSize = 12
+info.Font = Enum.Font.Gotham
+info.TextWrapped = true
+info.Text = "【操作方法】\n\nW: 前進  S: 後進\nA: 左移動  D: 右移動\nSPACE: 上昇\nCTRL: 下降\n\nTAB: GUI表示切替"
+info.Parent = content
+
+local infoCorner = Instance.new("UICorner")
+infoCorner.CornerRadius = UDim.new(0, 10)
+infoCorner.Parent = info
+
+-- TABキーでGUI切り替え
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
-
-    if input.KeyCode == Enum.KeyCode.W then CONTROL_STATE.moveForward = true end
-    if input.KeyCode == Enum.KeyCode.A then CONTROL_STATE.moveLeft = true end
-    if input.KeyCode == Enum.KeyCode.S then CONTROL_STATE.moveBackward = true end
-    if input.KeyCode == Enum.KeyCode.D then CONTROL_STATE.moveRight = true end
-    if input.KeyCode == Enum.KeyCode.Space then CONTROL_STATE.moveUp = true end
-    if input.KeyCode == Enum.KeyCode.LeftControl then CONTROL_STATE.moveDown = true end
+    if input.KeyCode == Enum.KeyCode.Tab then
+        CONFIG.GUI_VISIBLE = not CONFIG.GUI_VISIBLE
+        main.Visible = CONFIG.GUI_VISIBLE
+    end
 end)
 
-UserInputService.InputEnded:Connect(function(input, gameProcessed)
-    if input.KeyCode == Enum.KeyCode.W then CONTROL_STATE.moveForward = false end
-    if input.KeyCode == Enum.KeyCode.A then CONTROL_STATE.moveLeft = false end
-    if input.KeyCode == Enum.KeyCode.S then CONTROL_STATE.moveBackward = false end
-    if input.KeyCode == Enum.KeyCode.D then CONTROL_STATE.moveRight = false end
-    if input.KeyCode == Enum.KeyCode.Space then CONTROL_STATE.moveUp = false end
-    if input.KeyCode == Enum.KeyCode.LeftControl then CONTROL_STATE.moveDown = false end
-end)
-
-local function getPlayerMoveVector()
+-- ===== 移動ベクトル取得 =====
+local function getMoveVector()
     local char = LocalPlayer.Character
     if not char then return Vector3.new(0, 0, 0) end
 
     local hum = char:FindFirstChild("Humanoid")
     if not hum then return Vector3.new(0, 0, 0) end
 
-    local moveVec = hum.MoveDirection
-    if moveVec.Magnitude > 0 then
-        return moveVec
+    local move = hum.MoveDirection
+    if move.Magnitude > 0 then
+        return move
     end
 
-    local keyboard = Vector3.new(0, 0, 0)
     local camera = workspace.CurrentCamera
     if not camera then return Vector3.new(0, 0, 0) end
 
     local forward = camera.CFrame.LookVector
     local right = camera.CFrame.RightVector
+    local dir = Vector3.new(0, 0, 0)
 
-    if CONTROL_STATE.moveForward then keyboard = keyboard + forward end
-    if CONTROL_STATE.moveBackward then keyboard = keyboard - forward end
-    if CONTROL_STATE.moveLeft then keyboard = keyboard - right end
-    if CONTROL_STATE.moveRight then keyboard = keyboard + right end
+    if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir = dir + forward end
+    if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir = dir - forward end
+    if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir = dir - right end
+    if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir = dir + right end
 
-    if keyboard.Magnitude > 0 then
-        keyboard = keyboard.Unit
+    if dir.Magnitude > 0 then
+        dir = dir.Unit
     end
 
-    return keyboard
+    return dir
 end
 
+-- ===== メインループ =====
 RunService.RenderStepped:Connect(function()
-    if not CONFIG.ON then return end
+    if not CONFIG.ENABLED then return end
 
     local boat, seat = getMyBoat()
     if not boat then return end
 
-    seat.MaxSpeed = CONFIG.BOAT_SPEED
+    if seat then
+        seat.MaxSpeed = CONFIG.BOAT_SPEED
+    end
 
     for _, p in pairs(boat:GetDescendants()) do
-        if p:IsA("BasePart") then p.CanCollide = false end
+        if p:IsA("BasePart") then
+            p.CanCollide = false
+        end
     end
 
     local char = LocalPlayer.Character
     if char then
         for _, p in pairs(char:GetDescendants()) do
-            if p:IsA("BasePart") then p.CanCollide = false end
+            if p:IsA("BasePart") then
+                p.CanCollide = false
+            end
         end
     end
 
     local root = boat.PrimaryPart or seat
-    local cf = root.CFrame
+    if not root then return end
 
-    if CONFIG.AUTO_MODE then
-        VirtualInputManager:SendKeyEvent(true, "W", false, game)
+    local move = getMoveVector()
+    local camera = workspace.CurrentCamera
+    if not camera then return end
 
-        if CONFIG.FLY_HEIGHT > 0 then
-            root.CFrame = CFrame.new(cf.X, CONFIG.FLY_HEIGHT, cf.Z) * CFrame.Angles(0, select(2, cf:ToEulerAnglesYXZ()), 0)
-        end
+    local forward = camera.CFrame.LookVector
+    local right = camera.CFrame.RightVector
+    local moveDir = (forward * move.Z) + (right * move.X)
+
+    if moveDir.Magnitude > 0 then
+        moveDir = moveDir.Unit
     else
-        local playerMove = getPlayerMoveVector()
-        local camera = workspace.CurrentCamera
-        local moveDir = Vector3.new(0, 0, 0)
-
-        if camera then
-            local forward = camera.CFrame.LookVector
-            local right = camera.CFrame.RightVector
-            moveDir = (forward * playerMove.Z) + (right * playerMove.X)
-            if moveDir.Magnitude > 0 then
-                moveDir = moveDir.Unit
-            end
-        end
-
-        local moveSpeed = CONFIG.BOAT_SPEED / 60
-        local newPos = cf.Position + moveDir * moveSpeed
-
-        if CONTROL_STATE.moveUp then
-            newPos = newPos + Vector3.new(0, moveSpeed * 2, 0)
-        end
-
-        if CONTROL_STATE.moveDown then
-            newPos = newPos - Vector3.new(0, moveSpeed * 2, 0)
-        end
-
-        root.CFrame = CFrame.new(newPos) * CFrame.Angles(cf:ToEulerAnglesYXZ())
+        moveDir = Vector3.new(0, 0, 0)
     end
+
+    local speed = CONFIG.BOAT_SPEED / 65
+    local targetPos = root.Position
+
+    if moveDir.Magnitude > 0 then
+        targetPos = targetPos + (moveDir * speed)
+    end
+
+    if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+        targetPos = targetPos + (Vector3.new(0, 1, 0) * speed)
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+        targetPos = targetPos - (Vector3.new(0, 1, 0) * speed)
+    end
+
+    if CONFIG.FLY_HEIGHT > 0 then
+        targetPos = Vector3.new(targetPos.X, CONFIG.FLY_HEIGHT, targetPos.Z)
+    end
+
+    root.CFrame = CFrame.new(targetPos) * CFrame.Angles(root.CFrame:ToEulerAnglesXYZ())
 end)
 
-createGui()
-print("✅ Boat Fly Script loaded! GUI is ready. / ボートフライスクリプトがロードされました")
+print("✅ Boat Fly loaded. GUI ready. ON/OFF で開始")
