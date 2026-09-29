@@ -1,5 +1,5 @@
 -- ============================================
--- ボートで空飛び（Blox Fruits用・GUI付き自動/手動操作版）
+-- ボートで空飛び（Blox Fruits用・自分の移動と同期版）
 -- エクセキューターに貼って実行
 -- ============================================
 local RunService = game:GetService("RunService")
@@ -8,11 +8,11 @@ local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
--- ===== デフォルト設定 =====
+-- ===== 設定 =====
 local CONFIG = {
     BOAT_SPEED = 350,
     FLY_HEIGHT = 150,
-    AUTO_MODE = true,  -- true=自動操縦, false=手動操縦
+    AUTO_MODE = true,
     ON = true
 }
 
@@ -32,7 +32,6 @@ local function createGui()
     screenGui.ResetOnSpawn = false
     screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
-    -- メインフレーム
     local mainFrame = Instance.new("Frame")
     mainFrame.Name = "MainFrame"
     mainFrame.Size = UDim2.new(0, 300, 0, 280)
@@ -42,7 +41,6 @@ local function createGui()
     mainFrame.BorderSizePixel = 2
     mainFrame.Parent = screenGui
 
-    -- タイトル
     local title = Instance.new("TextLabel")
     title.Name = "Title"
     title.Size = UDim2.new(1, 0, 0, 30)
@@ -54,7 +52,7 @@ local function createGui()
     title.Text = "⛵ Boat Fly Control"
     title.Parent = mainFrame
 
-    -- ON/OFF トグル
+    -- ON/OFF
     local toggleLabel = Instance.new("TextLabel")
     toggleLabel.Name = "ToggleLabel"
     toggleLabel.Size = UDim2.new(0, 150, 0, 25)
@@ -118,7 +116,7 @@ local function createGui()
         modeButton.Text = CONFIG.AUTO_MODE and "AUTO" or "MANUAL"
     end)
 
-    -- スピード調整
+    -- Speed
     local speedLabel = Instance.new("TextLabel")
     speedLabel.Name = "SpeedLabel"
     speedLabel.Size = UDim2.new(1, -20, 0, 20)
@@ -132,30 +130,30 @@ local function createGui()
     speedLabel.TextXAlignment = Enum.TextXAlignment.Left
     speedLabel.Parent = mainFrame
 
-    local speedSlider = Instance.new("TextBox")
-    speedSlider.Name = "SpeedSlider"
-    speedSlider.Size = UDim2.new(1, -20, 0, 25)
-    speedSlider.Position = UDim2.new(0, 10, 0, 125)
-    speedSlider.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-    speedSlider.BorderColor3 = Color3.fromRGB(100, 200, 255)
-    speedSlider.BorderSizePixel = 1
-    speedSlider.TextColor3 = Color3.fromRGB(255, 255, 255)
-    speedSlider.TextSize = 14
-    speedSlider.Font = Enum.Font.Gotham
-    speedSlider.Text = "350"
-    speedSlider.Parent = mainFrame
+    local speedBox = Instance.new("TextBox")
+    speedBox.Name = "SpeedBox"
+    speedBox.Size = UDim2.new(1, -20, 0, 25)
+    speedBox.Position = UDim2.new(0, 10, 0, 125)
+    speedBox.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+    speedBox.BorderColor3 = Color3.fromRGB(100, 200, 255)
+    speedBox.BorderSizePixel = 1
+    speedBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    speedBox.TextSize = 14
+    speedBox.Font = Enum.Font.Gotham
+    speedBox.Text = "350"
+    speedBox.Parent = mainFrame
 
-    speedSlider.FocusLost:Connect(function()
-        local val = tonumber(speedSlider.Text)
+    speedBox.FocusLost:Connect(function()
+        local val = tonumber(speedBox.Text)
         if val and val > 0 then
             CONFIG.BOAT_SPEED = val
             speedLabel.Text = "Speed: " .. val
         else
-            speedSlider.Text = tostring(CONFIG.BOAT_SPEED)
+            speedBox.Text = tostring(CONFIG.BOAT_SPEED)
         end
     end)
 
-    -- 高さ調整
+    -- Height
     local heightLabel = Instance.new("TextLabel")
     heightLabel.Name = "HeightLabel"
     heightLabel.Size = UDim2.new(1, -20, 0, 20)
@@ -169,30 +167,30 @@ local function createGui()
     heightLabel.TextXAlignment = Enum.TextXAlignment.Left
     heightLabel.Parent = mainFrame
 
-    local heightSlider = Instance.new("TextBox")
-    heightSlider.Name = "HeightSlider"
-    heightSlider.Size = UDim2.new(1, -20, 0, 25)
-    heightSlider.Position = UDim2.new(0, 10, 0, 180)
-    heightSlider.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-    heightSlider.BorderColor3 = Color3.fromRGB(100, 200, 255)
-    heightSlider.BorderSizePixel = 1
-    heightSlider.TextColor3 = Color3.fromRGB(255, 255, 255)
-    heightSlider.TextSize = 14
-    heightSlider.Font = Enum.Font.Gotham
-    heightSlider.Text = "150"
-    heightSlider.Parent = mainFrame
+    local heightBox = Instance.new("TextBox")
+    heightBox.Name = "HeightBox"
+    heightBox.Size = UDim2.new(1, -20, 0, 25)
+    heightBox.Position = UDim2.new(0, 10, 0, 180)
+    heightBox.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+    heightBox.BorderColor3 = Color3.fromRGB(100, 200, 255)
+    heightBox.BorderSizePixel = 1
+    heightBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    heightBox.TextSize = 14
+    heightBox.Font = Enum.Font.Gotham
+    heightBox.Text = "150"
+    heightBox.Parent = mainFrame
 
-    heightSlider.FocusLost:Connect(function()
-        local val = tonumber(heightSlider.Text)
+    heightBox.FocusLost:Connect(function()
+        local val = tonumber(heightBox.Text)
         if val and val >= 0 then
             CONFIG.FLY_HEIGHT = val
             heightLabel.Text = "Height: " .. val
         else
-            heightSlider.Text = tostring(CONFIG.FLY_HEIGHT)
+            heightBox.Text = tostring(CONFIG.FLY_HEIGHT)
         end
     end)
 
-    -- 操作説明
+    -- 説明
     local infoLabel = Instance.new("TextLabel")
     infoLabel.Name = "InfoLabel"
     infoLabel.Size = UDim2.new(1, -20, 0, 50)
@@ -202,32 +200,37 @@ local function createGui()
     infoLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
     infoLabel.TextSize = 11
     infoLabel.Font = Enum.Font.Gotham
-    infoLabel.Text = "Manual: WASD移動\nSpace上昇, Ctrl下降"
+    infoLabel.Text = "Manual: 自分の移動に同期\nSpace上昇, Ctrl下降"
     infoLabel.TextWrapped = true
     infoLabel.Parent = mainFrame
 
     return screenGui
 end
 
--- ===== ボート取得関数 =====
 local function getMyBoat()
     local char = LocalPlayer.Character
     if not char then return nil end
     local hum = char:FindFirstChild("Humanoid")
     if not hum then return nil end
+
+    local seatPart = hum.SeatPart
+    if seatPart and (seatPart:IsA("VehicleSeat") or seatPart:IsA("Seat")) then
+        return seatPart.Parent, seatPart
+    end
+
     for _, boat in pairs(workspace.Boats:GetChildren()) do
         local seat = boat:FindFirstChild("VehicleSeat")
         if seat and seat.Occupant == hum then
             return boat, seat
         end
     end
+
     return nil
 end
 
--- ===== キー入力処理 =====
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
-    
+
     if input.KeyCode == Enum.KeyCode.W then CONTROL_STATE.moveForward = true end
     if input.KeyCode == Enum.KeyCode.A then CONTROL_STATE.moveLeft = true end
     if input.KeyCode == Enum.KeyCode.S then CONTROL_STATE.moveBackward = true end
@@ -245,20 +248,49 @@ UserInputService.InputEnded:Connect(function(input, gameProcessed)
     if input.KeyCode == Enum.KeyCode.LeftControl then CONTROL_STATE.moveDown = false end
 end)
 
--- ===== メインループ =====
+local function getPlayerMoveVector()
+    local char = LocalPlayer.Character
+    if not char then return Vector3.new(0, 0, 0) end
+
+    local hum = char:FindFirstChild("Humanoid")
+    if not hum then return Vector3.new(0, 0, 0) end
+
+    local moveVec = hum.MoveDirection
+    if moveVec.Magnitude > 0 then
+        return moveVec
+    end
+
+    local keyboard = Vector3.new(0, 0, 0)
+    local camera = workspace.CurrentCamera
+    if not camera then return Vector3.new(0, 0, 0) end
+
+    local forward = camera.CFrame.LookVector
+    local right = camera.CFrame.RightVector
+
+    if CONTROL_STATE.moveForward then keyboard = keyboard + forward end
+    if CONTROL_STATE.moveBackward then keyboard = keyboard - forward end
+    if CONTROL_STATE.moveLeft then keyboard = keyboard - right end
+    if CONTROL_STATE.moveRight then keyboard = keyboard + right end
+
+    if keyboard.Magnitude > 0 then
+        keyboard = keyboard.Unit
+    end
+
+    return keyboard
+end
+
 RunService.RenderStepped:Connect(function()
     if not CONFIG.ON then return end
-    
+
     local boat, seat = getMyBoat()
     if not boat then return end
 
-    -- 1. 速度アップ
     seat.MaxSpeed = CONFIG.BOAT_SPEED
 
-    -- 2. ボートと自分の当たり判定をOFF
     for _, p in pairs(boat:GetDescendants()) do
         if p:IsA("BasePart") then p.CanCollide = false end
     end
+
     local char = LocalPlayer.Character
     if char then
         for _, p in pairs(char:GetDescendants()) do
@@ -266,37 +298,43 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
+    local root = boat.PrimaryPart or seat
+    local cf = root.CFrame
+
     if CONFIG.AUTO_MODE then
-        -- ===== 自動モード =====
-        -- Wキーを押しっぱなしにして前進
         VirtualInputManager:SendKeyEvent(true, "W", false, game)
 
-        -- 高さを固定して「空飛び」にする
         if CONFIG.FLY_HEIGHT > 0 then
-            local root = boat.PrimaryPart or seat
-            local cf = root.CFrame
             root.CFrame = CFrame.new(cf.X, CONFIG.FLY_HEIGHT, cf.Z) * CFrame.Angles(0, select(2, cf:ToEulerAnglesYXZ()), 0)
         end
     else
-        -- ===== 手動モード =====
-        local root = boat.PrimaryPart or seat
-        local cf = root.CFrame
-        local moveSpeed = CONFIG.BOAT_SPEED / 60
-
+        local playerMove = getPlayerMoveVector()
+        local camera = workspace.CurrentCamera
         local moveDir = Vector3.new(0, 0, 0)
-        if CONTROL_STATE.moveForward then moveDir = moveDir + (cf.LookVector) end
-        if CONTROL_STATE.moveBackward then moveDir = moveDir - (cf.LookVector) end
-        if CONTROL_STATE.moveLeft then moveDir = moveDir - (cf.RightVector) end
-        if CONTROL_STATE.moveRight then moveDir = moveDir + (cf.RightVector) end
 
-        local newPos = cf.Position + moveDir.Unit * moveSpeed
-        if CONTROL_STATE.moveUp then newPos = newPos + Vector3.new(0, moveSpeed * 2, 0) end
-        if CONTROL_STATE.moveDown then newPos = newPos - Vector3.new(0, moveSpeed * 2, 0) end
+        if camera then
+            local forward = camera.CFrame.LookVector
+            local right = camera.CFrame.RightVector
+            moveDir = (forward * playerMove.Z) + (right * playerMove.X)
+            if moveDir.Magnitude > 0 then
+                moveDir = moveDir.Unit
+            end
+        end
+
+        local moveSpeed = CONFIG.BOAT_SPEED / 60
+        local newPos = cf.Position + moveDir * moveSpeed
+
+        if CONTROL_STATE.moveUp then
+            newPos = newPos + Vector3.new(0, moveSpeed * 2, 0)
+        end
+
+        if CONTROL_STATE.moveDown then
+            newPos = newPos - Vector3.new(0, moveSpeed * 2, 0)
+        end
 
         root.CFrame = CFrame.new(newPos) * CFrame.Angles(cf:ToEulerAnglesYXZ())
     end
 end)
 
--- ===== GUI作成実行 =====
 createGui()
 print("✅ Boat Fly Script loaded! GUI is ready. / ボートフライスクリプトがロードされました")
